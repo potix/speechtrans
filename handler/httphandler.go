@@ -62,7 +62,7 @@ func (h *HttpHandler) SetRouting(router *gin.Engine) {
 	authGroup := router.Group("/", gin.BasicAuth(h.accounts))
 	authGroup.GET("/", h.indexHtml)
 	authGroup.GET("/index.html", h.indexHtml)
-	authGroup.GET("/ws/translation", h.translation)
+	authGroup.GET("/ws/trans", h.translation)
 	authGroup.StaticFile("/favicon.ico", favicon)
         authGroup.Static("/js", js)
         authGroup.Static("/css", css)

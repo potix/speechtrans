@@ -1,0 +1,44 @@
+
+
+
+<!DOCTYPE html>
+<html lang="ja">
+        <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width,initial-scale=1" />
+                <title>speech translation</title>
+                <link rel="stylesheet" href="css/style.css" />
+        </head>
+	<body>
+		<p>
+			<div class="inline-block">
+				Audio input devices:
+			</div>
+                        <div class="inline-block" id="div_for_audio_input_devices">
+                                <select v-model="selectedAudioInputDevice">
+                                        <option v-for="device in audioInputDevices" v-bind:value="device.deviceId">
+                                        {{ "{{device.label}}" }}
+                                        </option>
+                                </select>
+                        </div>
+		</p>
+		<p>
+			<div class="inline-block">
+				Audio output devices:
+			</div>
+			<div class="inline-block" id="div_for_audio_output_devices">
+				<select v-model="selectedAudioOutputDevice" v-on:change="setSkinId">
+					<option v-for="device in audioOutputDevices" v-bind:value="device.deviceId">
+					{{ "{{device.label}}" }}
+					</option>
+				</select>
+			</div>
+		</p>
+		<p>
+			<audio id="output_audio" controls autoplay></audio>
+                </p>
+		<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+		<script type='text/javascript' src="js/media.js"></script>
+        </body>
+</html>
+
