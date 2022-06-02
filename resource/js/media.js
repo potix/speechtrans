@@ -1,3 +1,5 @@
+let inputAudioContext = null
+let wsSocket = null
 
 let audioInputDevicesVue = new Vue({
 	el: '#div_for_audio_input_devices',
@@ -89,22 +91,77 @@ function getAudioInOutDevices() {
 }
 
 function startRecording() {
-	if (audioInputDevicesVue.selectedVideoInputDevice == "" ||
-	    audioOutputDevicesVue.selectedAudioInputDevice == "") {
+	if (audioInputDevicesVue.selectedAudioInputDevice == "" ||
+	    audioOutputDevicesVue.selectedAudioOutputDevice == "") {
 		return
 	}
-	console.log(audioInputDevicesVue.selectedVideoInputDevice);
-	console.log(audioOutputDevicesVue.selectedAudioInputDevice);
-	// XXXX startSignaling()
+	console.log(audioInputDevicesVue.selectedAudioInputDevice);
+	console.log(audioOutputDevicesVue.selectedAudioOutputDevice);
 	navigator.mediaDevices.getUserMedia({
-		audio: { deviceId: audioInputDevicesVue.selectedAudioInputDevice }
+		audio: { deviceId: audioInputDevicesVue.selectedAudioInputDevice,
+			 sampleRate: 96000,
+			 sampleSize: 24,
+			 channelCount: 2,
+			 autoGainControl: true,
+			 noiseSuppression: true,
+			 echoCancellation: true }
 	}).then(function(stream) {
-		console.log(stream);
+		connectWebsocket(stream);
         })
         .catch(function(err) {
-                console.log("in startLocalVideo: " + err.name + ": " + err.message);
+                console.log("in startRecording: " + err.name + ": " + err.message);
+        });
+	const startLamp = document.getElementById('start_lamp');
+	startLamp.setAttribute("class", "border-radius background-color-red inline-block" )
+}
+
+function stopRecording() {
+	if (inputAudioContext) {
+		inputAudioContext.close();
+		inputAudioContext = null;
+	}
+	if (wsSocket) {
+		wsSocket.close();
+		wsSocket = null;
+	}
+	const startLamp = document.getElementById('start_lamp');
+	startLamp.setAttribute("class", "border-radius background-color-gray inline-block" )
+}
+
+function connectWebsocket(stream) {
+	wsSocket = new WebSocket("wss://" + location.host + location.pathname + "ws/trans", "translation");
+	wsSocket.onopen = event => {
+		console.log("signaling open");
+		connectWorkletNode(stream, wsSocket)
+	};
+	wsSocket.onmessage = event => {
+		console.log("signaling message");
+	}
+	wsSocket.onerror = event => {
+		console.log("signaling error");
+		console.log(event);
+	}
+	wsSocket.onclose = event => {
+		console.log("signaling close");
+		console.log(event);
+	}
+}
+
+function connectWorkletNode(stream, wsSocket) {
+	inputAudioContext = new AudioContext();
+	inputAudioContext.audioWorklet.addModule('js/recorder_worklet.js').then(function () {
+		const recorder = new AudioWorkletNode(inputAudioContext, 'recorder-worklet');
+		recorder.port.onmessage = (event) => {
+			    sendRawData(wsSocket, event);
+		};
+		const audioInput = inputAudioContext.createMediaStreamSource(stream);
+                audioInput.connect(recorder);
+                recorder.connect(inputAudioContext.destination);
         });
 }
 
+function sendRawData(wsSocket, event) {
+	console.log(event.data);
+}
 
 

@@ -36,7 +36,13 @@
 		</p>
 
 		<p>
-			<button type="button" onclick="startRecording();">Start video</button>
+			<div class="inline-block">
+				<button class="button" type="button" onclick="startRecording();">start recording</button>
+			</div>
+			<div class="inline-block">
+				<button class="button" type="button" onclick="stopRecording();">stop recording</button>
+			</div>
+			<div id="start_lamp" class="border-radius background-color-gray inline-block"></div>
 		</p>
 		<p>
 			<audio id="output_audio" controls autoplay></audio>

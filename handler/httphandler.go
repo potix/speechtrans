@@ -173,5 +173,8 @@ func NewHttpHandler(resourcePath string, accounts map[string]string, opts ...Htt
                 verbose:          baseOpts.verbose,
                 resourcePath:     resourcePath,
                 accounts:         accounts,
+		clients:          make(map[*websocket.Conn]*client),
         }, nil
 }
+
+

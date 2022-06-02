@@ -2,3 +2,22 @@
 	display: inline-block;
 }
 
+.button {
+	height: 30px;
+}
+
+.border-radius {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	vertical-align: middle;
+}
+
+.background-color-gray {
+	background-color: gray;
+}
+
+.background-color-red {
+	background-color: red;
+}
+
