@@ -82,10 +82,29 @@ function getAudioInOutDevices() {
 	console.log(audioOutputDevices);
 	audioInputDevicesVue.audioInputDevices = audioInputDevices;
 	audioOutputDevicesVue.audioOutputDevices = audioOutputDevices;
-	// XXXX startSignaling()
     })
     .catch(function(err) {
         console.log(err.name + ": " + err.message);
     });
 }
+
+function startRecording() {
+	if (audioInputDevicesVue.selectedVideoInputDevice == "" ||
+	    audioOutputDevicesVue.selectedAudioInputDevice == "") {
+		return
+	}
+	console.log(audioInputDevicesVue.selectedVideoInputDevice);
+	console.log(audioOutputDevicesVue.selectedAudioInputDevice);
+	// XXXX startSignaling()
+	navigator.mediaDevices.getUserMedia({
+		audio: { deviceId: audioInputDevicesVue.selectedAudioInputDevice }
+	}).then(function(stream) {
+		console.log(stream);
+        })
+        .catch(function(err) {
+                console.log("in startLocalVideo: " + err.name + ": " + err.message);
+        });
+}
+
+
 
