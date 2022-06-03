@@ -1,5 +1,5 @@
 const SAMPLE_RATE=48000
-const SAMPLE_SIZE=24
+const SAMPLE_SIZE=16
 const CHANNEL_COUNT=1
 let inputAudioContext = null
 let wsSocket = null
@@ -49,6 +49,17 @@ let audioOutputDevicesVue = new Vue({
 				console.log("can not set skinId");
 			}
 		},
+	}
+});
+
+let noiseSupressionVue = new Vue({
+	el: '#noise-suppression',
+	data: {
+		checked: true
+	},
+	mounted : function(){
+	},
+	methods: {
 	}
 });
 
@@ -102,13 +113,14 @@ function startRecording() {
 	lastWaveBytes = []
 	console.log(audioInputDevicesVue.selectedAudioInputDevice);
 	console.log(audioOutputDevicesVue.selectedAudioOutputDevice);
+	console.log(noiseSupressionVue.checked);
 	navigator.mediaDevices.getUserMedia({
 		audio: { deviceId: audioInputDevicesVue.selectedAudioInputDevice,
 			 sampleRate: SAMPLE_RATE,
 			 sampleSize: SAMPLE_SIZE,
 			 channelCount: CHANNEL_COUNT,
+			 noiseSuppression: noiseSupressionVue.checked,
 			 autoGainControl: false,
-			 noiseSuppression: false,
 			 echoCancellation: false }
 	}).then(function(stream) {
 		connectWebsocket(stream);
@@ -237,5 +249,5 @@ function createWaveFile() {
 	const url = URL.createObjectURL(new Blob([arrayBuffer], {type: "audio/wav"}))
 	const link = document.getElementById('recoarded_audio');
 	link.href = url;
-	link.innerText = 'latest recoarded audio file';
+	link.innerText = 'last recoarded audio';
 }
