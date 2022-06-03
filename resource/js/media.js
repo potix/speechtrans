@@ -1,5 +1,9 @@
+const SAMPLE_RATE=4800
+const SAMPLE_SIZE=8
+const CHANNEL_COUNT=1
 let inputAudioContext = null
 let wsSocket = null
+let lastWaveBytes = []
 
 let audioInputDevicesVue = new Vue({
 	el: '#div_for_audio_input_devices',
@@ -95,24 +99,23 @@ function startRecording() {
 	    audioOutputDevicesVue.selectedAudioOutputDevice == "") {
 		return
 	}
+	lastWaveBytes = []
 	console.log(audioInputDevicesVue.selectedAudioInputDevice);
 	console.log(audioOutputDevicesVue.selectedAudioOutputDevice);
 	navigator.mediaDevices.getUserMedia({
 		audio: { deviceId: audioInputDevicesVue.selectedAudioInputDevice,
-			 sampleRate: 96000,
-			 sampleSize: 24,
-			 channelCount: 2,
-			 autoGainControl: true,
-			 noiseSuppression: true,
-			 echoCancellation: true }
+			 sampleRate: SAMPLE_RATE,
+			 sampleSize: SAMPLE_SIZE,
+			 channelCount: CHANNEL_COUNT,
+			 autoGainControl: false,
+			 noiseSuppression: false,
+			 echoCancellation: false }
 	}).then(function(stream) {
 		connectWebsocket(stream);
         })
         .catch(function(err) {
                 console.log("in startRecording: " + err.name + ": " + err.message);
         });
-	const startLamp = document.getElementById('start_lamp');
-	startLamp.setAttribute("class", "border-radius background-color-red inline-block" )
 }
 
 function stopRecording() {
@@ -126,6 +129,7 @@ function stopRecording() {
 	}
 	const startLamp = document.getElementById('start_lamp');
 	startLamp.setAttribute("class", "border-radius background-color-gray inline-block" )
+	createWaveFile()
 }
 
 function connectWebsocket(stream) {
@@ -150,18 +154,90 @@ function connectWebsocket(stream) {
 function connectWorkletNode(stream, wsSocket) {
 	inputAudioContext = new AudioContext();
 	inputAudioContext.audioWorklet.addModule('js/recorder_worklet.js').then(function () {
+		const audioInput = inputAudioContext.createMediaStreamSource(stream);
 		const recorder = new AudioWorkletNode(inputAudioContext, 'recorder-worklet');
+		const params = {
+                         sampleRate: SAMPLE_RATE,
+                         sampleSize: SAMPLE_SIZE,
+                         channelCount: CHANNEL_COUNT,
+                         streamNodeChannelCount: audioInput.channelCount
+		}
+		recorder.port.postMessage(JSON.stringify(params));
 		recorder.port.onmessage = (event) => {
 			    sendRawData(wsSocket, event);
 		};
-		const audioInput = inputAudioContext.createMediaStreamSource(stream);
                 audioInput.connect(recorder);
                 recorder.connect(inputAudioContext.destination);
+		const startLamp = document.getElementById('start_lamp');
+		startLamp.setAttribute("class", "border-radius background-color-red inline-block" )
         });
 }
 
 function sendRawData(wsSocket, event) {
-	console.log(event.data);
+	const message = JSON.parse(event.data)
+	console.log(message)
+	lastWaveBytes =	lastWaveBytes.concat(message.waveBytes)
+}
+
+function createWaveFile() {
+	let arrayBuffer = new ArrayBuffer(lastWaveBytes.length + 4 + 4 + 4 + 4 + 4 + 2 + 2 + 4 + 4 + 2 + 2 + 4 + 4)
+	let dataView = new DataView(arrayBuffer);
+	let offset = 0
+	dataView.setUint8(offset++, 0x52)
+	dataView.setUint8(offset++, 0x49)
+	dataView.setUint8(offset++, 0x46)
+	dataView.setUint8(offset++, 0x46)
+
+	dataView.setUint32(offset, arrayBuffer.byteLength - 8, true)
+	offset += 4
+
+	dataView.setUint8(offset++, 0x57)
+	dataView.setUint8(offset++, 0x41)
+	dataView.setUint8(offset++, 0x56)
+	dataView.setUint8(offset++, 0x45)
+
+	dataView.setUint8(offset++, 0x66)
+	dataView.setUint8(offset++, 0x6d)
+	dataView.setUint8(offset++, 0x74)
+	dataView.setUint8(offset++, 0x20)
+
+	dataView.setUint32(offset, 16, true)
+	offset += 4
+
+	dataView.setUint16(offset, 1, true)
+	offset += 2
+
+	dataView.setUint16(offset, CHANNEL_COUNT, true)
+	offset += 2
+
+	dataView.setUint32(offset, SAMPLE_RATE, true)
+	offset += 4
+
+	dataView.setUint32(offset, SAMPLE_RATE * (SAMPLE_SIZE / 8) * CHANNEL_COUNT, true)
+	offset += 4
+
+	dataView.setUint16(offset,  (SAMPLE_SIZE / 8) * CHANNEL_COUNT, true)
+	offset += 2
+
+	dataView.setUint16(offset,  SAMPLE_SIZE, true)
+	offset += 2
+
+	dataView.setUint8(offset++, 0x64)
+	dataView.setUint8(offset++, 0x61)
+	dataView.setUint8(offset++, 0x74)
+	dataView.setUint8(offset++, 0x61)
+
+	dataView.setUint32(offset, lastWaveBytes.length, true)
+	offset += 4
+
+	for (let waveByte of lastWaveBytes) {
+		dataView.setUint8(offset++, waveByte)
+	}
+
+	const url = URL.createObjectURL(new Blob([arrayBuffer], {type: "audio/wav"}))
+	const link = document.getElementById('recoarded_audio');
+	link.href = url;
+	link.innerText = 'latest recoarded audio file';
 }
 
 
