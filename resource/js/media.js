@@ -1,5 +1,5 @@
-const SAMPLE_RATE=4800
-const SAMPLE_SIZE=8
+const SAMPLE_RATE=48000
+const SAMPLE_SIZE=24
 const CHANNEL_COUNT=1
 let inputAudioContext = null
 let wsSocket = null
@@ -152,7 +152,7 @@ function connectWebsocket(stream) {
 }
 
 function connectWorkletNode(stream, wsSocket) {
-	inputAudioContext = new AudioContext();
+	inputAudioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
 	inputAudioContext.audioWorklet.addModule('js/recorder_worklet.js').then(function () {
 		const audioInput = inputAudioContext.createMediaStreamSource(stream);
 		const recorder = new AudioWorkletNode(inputAudioContext, 'recorder-worklet');
@@ -175,7 +175,6 @@ function connectWorkletNode(stream, wsSocket) {
 
 function sendRawData(wsSocket, event) {
 	const message = JSON.parse(event.data)
-	console.log(message)
 	lastWaveBytes =	lastWaveBytes.concat(message.waveBytes)
 }
 
