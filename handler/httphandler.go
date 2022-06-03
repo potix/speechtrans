@@ -142,7 +142,34 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 	// XXX new translator
 
 	for {
-
+		t, msgJson, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+		if t != websocket.TextMessage {
+			log.Printf("unsupported message type: %v", t)
+			continue
+		}
+		var msg message.Message
+		if err := json.Unmarshal(msgJson, &msg); err != nil {
+			log.Printf("can not unmarshal message: %v", err)
+			continue
+		}
+		if msg.MType == message.MTypePing {
+			continue
+		} else if msg.MType == message.MTypeInAudioConfReq {
+			if msg.InAudioConf == nil {
+				log.Printf("invalid message (no inAudioConf): %v", err)
+				continue
+			}
+			log.Printf("%+v", msg.InAudioConf)
+		} else if msg.MType == message.MTypeInAudioDataReq {
+			if msg.InAudioData == nil {
+				log.Printf("invalid message (no inAudioConf): %v", err)
+				continue
+			}
+			log.Printf("%+v", msg.InAudioData)
+		}
 	}
 }
 

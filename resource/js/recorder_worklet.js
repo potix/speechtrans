@@ -113,9 +113,13 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 				}
 			}
 		}
-		let message = { MType: "inAudio", waveBytes: Array.from(new Uint8Array(waveArrayBuffer)) };
-		let jsonMessage = JSON.stringify(message);
-		this.port.postMessage(jsonMessage);
+		let message = {
+			MType: "inAudioDataReq",
+			InAudioData: {
+				DataBytes: Array.from(new Uint8Array(waveArrayBuffer))
+			}
+		}
+		this.port.postMessage(JSON.stringify(message));
                 return true;
         }
 }

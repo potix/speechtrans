@@ -187,8 +187,21 @@ function connectWorkletNode(stream, wsSocket) {
 }
 
 function sendRawData(wsSocket, event) {
-	const message = JSON.parse(event.data)
-	lastWaveBytes =	lastWaveBytes.concat(message.waveBytes)
+	if (lastWaveBytes.length == 0) {
+		const message = {
+                        MType: "inAudioConfReq",
+                        InAudioConf: {
+                                Encoding:"wave",
+                                SampleRate:SAMPLE_RATE,
+                                SampleSize:SAMPLE_SIZE,
+                                ChannelCount:CHANNEL_COUNT
+                        }
+                };
+		wsSocket.send(JSON.stringify(message));
+	}
+	wsSocket.send(event.data);
+	const message = JSON.parse(event.data);
+	lastWaveBytes =	lastWaveBytes.concat(message.InAudioData.DataBytes);
 }
 
 function createWaveFile() {

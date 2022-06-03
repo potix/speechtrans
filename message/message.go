@@ -1,8 +1,28 @@
 package message
 
+const (
+	MTypePing           string = "ping"
+	MTypeInAudioConfReq        = "inAudioConfReq"
+	MTypeInAudioDataReq        = "inAudioDataReq"
+)
 
-const MTypePing string = "ping"
+const (
+	EncodingWave string = "wave"
+)
 
 type Message struct {
-	MType string
+	MType       string
+	InAudioConf *InAudioConf
+	InAudioData *InAudioData
+}
+
+type InAudioConf struct {
+	Encoding     string
+	SampleRate   int
+	SampleSize   int
+	ChannelCount int
+}
+
+type InAudioData struct {
+	DataBytes    []byte
 }
