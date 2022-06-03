@@ -5,6 +5,22 @@ let inputAudioContext = null
 let wsSocket = null
 let lastWaveBytes = []
 
+/*
+ja-JP
+en-US
+en-GB
+en-AU
+en-SG
+fr-FR
+nl-NL
+de-DE
+it-IT
+ko-KR
+ru-RU
+sv-SE
+tr-TR
+*/
+
 let audioInputDevicesVue = new Vue({
 	el: '#div_for_audio_input_devices',
 	data: {
@@ -194,7 +210,9 @@ function sendRawData(wsSocket, event) {
                                 Encoding:"wave",
                                 SampleRate:SAMPLE_RATE,
                                 SampleSize:SAMPLE_SIZE,
-                                ChannelCount:CHANNEL_COUNT
+                                ChannelCount:CHANNEL_COUNT,
+                                SrcLang: "ja",
+                                DstLang: "en",
                         }
                 };
 		wsSocket.send(JSON.stringify(message));

@@ -21,6 +21,8 @@ type InAudioConf struct {
 	SampleRate   int
 	SampleSize   int
 	ChannelCount int
+	SrcLang      string
+	DstLang      string
 }
 
 type InAudioData struct {
