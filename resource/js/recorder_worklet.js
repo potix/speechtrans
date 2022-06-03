@@ -23,7 +23,7 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 			rawValue = (rawValue + 1)
 		}
 		if (rawValue < 0) {
-			waveValue = rawValue * -1 * min 
+			waveValue = rawValue * min 
 		} else {
 			waveValue = rawValue * max
 			if (unsigned) {
@@ -34,7 +34,7 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 	}
 	mixWave(waveValue1, waveValue2, min, max) {
 		mixWaveValue = waveValue1 + waveValue2
-		if (mixWaveValue < min) {
+		if (mixWaveValue < min * -1) {
 			mixWaveValue = min
 		} else if (mixWaveValue > max) {
 			mixWaveValue = max
@@ -55,39 +55,23 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 		}
 		return [ hv, value & 0xff ]
 	}
-	toBytes(waveValues) {
-		let uint8Array = new Uint8Array(waveValues.length * this.sampleSize / 8)
-		let idx = 0
-		for (const waveValue of waveValues) {
-			if (this.sampleSize == 8) {
-				uint8Array[idx++] = waveValue
-			} else if (this.sampleSize == 16) {
-				const bytes = this.i16bitTobytes(waveValue)
-				uint8Array[idx++] = bytes[1]
-				uint8Array[idx++] = bytes[0]
-			} else if (this.sampleSize == 24) {
-				const bytes = this.i24bitTobytes(waveValue)
-				uint8Array[idx++] = bytes[2]
-				uint8Array[idx++] = bytes[1]
-				uint8Array[idx++] = bytes[0]
-			}
-		}
-		return Array.from(uint8Array)
-	}
         process(inputs, outputs, parameters) {
 		//console.log(inputs)
 		let minValue = 0
 		let maxValue = 255
 		let unsigned = true
 		if (this.sampleSize == 16) {
-			minValue = -32768;
+			minValue = 32768;
 			maxValue = 32767;
 			unsigned = false
 		} else if (this.sampleSize == 24) {
-			minValue = -8388608;
+			minValue = 8388608;
 			maxValue = 8388607;
 			unsigned = false
 		}
+		let waveArrayBuffer = null
+		let waveDataView = null
+		let waveArrayBufferOffset = 0
 		let waveValues = []
 		for (const idx1 in inputs) {
 			let inChannelsLen = 0
@@ -99,37 +83,41 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 				inChannelsLen = this.channelCount
 			}
 			for (const idx2 in inChannels) {
-				let inChannelData = inChannels[idx2]
+				const inChannelData = inChannels[idx2]
 				inChannelDataLen = inChannelData.length
 				break
+			}
+			if (waveArrayBuffer == null) { 
+				const waveArrayBufferLen = inChannelsLen * inChannelDataLen * (this.sampleSize / 8)
+				waveArrayBuffer = new ArrayBuffer(waveArrayBufferLen)
+				waveDataView = new DataView(waveArrayBuffer)
+			} else {
+				waveArrayBufferOffset = 0
 			}
 			for (let idx3 = 0, idx4 = 0; idx3 < inChannelDataLen; idx3 += 1, idx4 += inChannelsLen) {
 				for (let idx2 = 0; idx2 < inChannelsLen; idx2 += 1) {
 					if (waveValues[idx4 + idx2]) {
-						newWaveValue = this.convertRawToWave(inputs[idx1][idx2][idx3], minValue, maxValue, unsigned)
-						waveValues[idx4 + idx2] = this.mixWave(wavData[idx3], newWaveValue, minValue, maxValue)
+						const newWaveValue = this.convertRawToWave(inputs[idx1][idx2][idx3], minValue, maxValue, unsigned)
+						waveValues[idx4 + idx2] = this.mixWave(waveValues[idx4 + idx2], newWaveValue, minValue, maxValue)
 					} else {
 						waveValues[idx4 + idx2] = this.convertRawToWave(inputs[idx1][idx2][idx3], minValue, maxValue, unsigned)
+					}
+					if (this.sampleSize == 8) {
+						waveDataView.setUint8(waveArrayBufferOffset++, waveValues[idx4 + idx2]) 
+					} else if (this.sampleSize == 16) {
+						const bytes = this.i16bitTobytes(waveValues[idx4 + idx2])
+						waveDataView.setUint8(waveArrayBufferOffset++, bytes[1]) 
+						waveDataView.setUint8(waveArrayBufferOffset++, bytes[0]) 
+					} else if (this.sampleSize == 24) {
+						const bytes = this.i24bitTobytes(waveValues[idx4 + idx2])
+						waveDataView.setUint8(waveArrayBufferOffset++, bytes[2]) 
+						waveDataView.setUint8(waveArrayBufferOffset++, bytes[1]) 
+						waveDataView.setUint8(waveArrayBufferOffset++, bytes[0]) 
 					}
 				}
 			}
 		}
-		/* loopbeck */
-		/*
-		for (const idx1 in inputs) {
-			let inChannels = inputs[idx1] 
-			let outChannels = outputs[idx1]
-			for (const idx2 in inChannels) {
-				let inChannel = inChannels[idx2]
-				let outChannel = outChannels[idx2]
-				for (const idx3 in inChannel) {
-					outChannel[idx3] = inChannel[idx3]
-				}
-
-			}
-		}
-		*/
-		let message = { MType: "inAudio", waveBytes: this.toBytes(waveValues) };
+		let message = { MType: "inAudio", waveBytes: Array.from(new Uint8Array(waveArrayBuffer)) };
 		let jsonMessage = JSON.stringify(message);
 		this.port.postMessage(jsonMessage);
                 return true;
