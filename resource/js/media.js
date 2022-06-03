@@ -153,6 +153,7 @@ function connectWebsocket(stream) {
 
 function connectWorkletNode(stream, wsSocket) {
 	inputAudioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+	console.log(inputAudioContext.sampleRate)
 	inputAudioContext.audioWorklet.addModule('js/recorder_worklet.js').then(function () {
 		const audioInput = inputAudioContext.createMediaStreamSource(stream);
 		const recorder = new AudioWorkletNode(inputAudioContext, 'recorder-worklet');
@@ -179,7 +180,7 @@ function sendRawData(wsSocket, event) {
 }
 
 function createWaveFile() {
-	let arrayBuffer = new ArrayBuffer(lastWaveBytes.length + 4 + 4 + 4 + 4 + 4 + 2 + 2 + 4 + 4 + 2 + 2 + 4 + 4)
+	let arrayBuffer = new ArrayBuffer(4 + 4 + 4 + 4 + 4 + 2 + 2 + 4 + 4 + 2 + 2 + 4 + 4 + lastWaveBytes.length)
 	let dataView = new DataView(arrayBuffer);
 	let offset = 0
 	dataView.setUint8(offset++, 0x52)
@@ -238,5 +239,3 @@ function createWaveFile() {
 	link.href = url;
 	link.innerText = 'latest recoarded audio file';
 }
-
-

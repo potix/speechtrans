@@ -1,7 +1,3 @@
-//class AudioWorkletProcessor {}
-//function registerProcessor(a, b) {
-//}
-
 class RecorderWorkletProcessor extends AudioWorkletProcessor {
         constructor(args) {
                 super(args);
