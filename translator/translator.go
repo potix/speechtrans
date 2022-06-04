@@ -91,7 +91,7 @@ func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAud
                                 }
 				return
 			}
-			log.Printf("recv input audio data (len = %v)", len(buff))
+			//log.Printf("recv input audio data (len = %v)", len(buff))
 			err := stream.Send(&speechpb.StreamingRecognizeRequest{
 				StreamingRequest: &speechpb.StreamingRecognizeRequest_AudioContent{
 					AudioContent: buff,
@@ -148,7 +148,7 @@ func (t *Translator) ToTextContent(dataBytes []byte) {
 		return
 	}
 	t.inAudioDataCh <- dataBytes
-	log.Printf("send input audio data (len = %v)", len(t.inAudioDataCh))
+	//log.Printf("send input audio data (len = %v)", len(t.inAudioDataCh))
 }
 
 func (t *Translator) ToTextContentEnd() {

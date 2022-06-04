@@ -223,7 +223,7 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 					continue
 				}
 			}
-log.Printf("start %v", msg.InAudioConf)
+			log.Printf("inAudioConfReq %v", msg.InAudioConf)
 			client.translator.ToText(conn, msg.InAudioConf, h.toTextNotifyCb)
 			client.progressInAudio = true
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "")
@@ -243,7 +243,6 @@ log.Printf("start %v", msg.InAudioConf)
 			if !client.progressInAudio {
 				continue
 			}
-log.Printf("len = %v", len(msg.InAudioData.DataBytes))
 			client.translator.ToTextContent(msg.InAudioData.DataBytes)
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataRes, "")
 			if err != nil {
@@ -254,7 +253,7 @@ log.Printf("len = %v", len(msg.InAudioData.DataBytes))
 			if !client.progressInAudio {
 				continue
 			}
-log.Printf("end")
+			log.Printf("inAudioDataEndReq")
 			client.translator.ToTextContentEnd()
 			client.progressInAudio = false
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataEndRes, "")
@@ -263,7 +262,7 @@ log.Printf("end")
 				continue
 			}
 		} else if msg.MType == message.MTypeTranslateReq {
-log.Printf("translate")
+			log.Printf("translateReq")
 			if msg.TransConf == nil        ||
 			   msg.TransConf.SrcLang == "" ||
 			   msg.TransConf.DstLang == "" ||
