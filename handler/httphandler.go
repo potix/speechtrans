@@ -33,7 +33,8 @@ func HttpVerbose(verbose bool) HttpOption {
 }
 
 type client struct {
-	writeMutex sync.Mutex
+	writeMutex  sync.Mutex
+	translating bool
 }
 
 type HttpHandler struct {
@@ -74,10 +75,11 @@ func (h *HttpHandler) indexHtml(c *gin.Context) {
 	c.HTML(http.StatusOK, "index.html", gin.H{})
 }
 
-func (h *HttpHandler) clientRegister(conn *websocket.Conn) {
+func (h *HttpHandler) clientRegister(conn *websocket.Conn) *client {
 	h.clientsMutex.Lock()
 	defer h.clientsMutex.Unlock()
 	h.clients[conn] = new(client)
+	return h.clients[conn]
 }
 
 func (h *HttpHandler) clientUnregister(conn *websocket.Conn) {
@@ -131,8 +133,26 @@ func (h *HttpHandler) startPingLoop(conn *websocket.Conn, pingLoopStopChan chan 
 	}
 }
 
+func (h *HttpHandler) sendEmptyMessage(conn *websocket.Conn, mType string, responseMessage string) error {
+	newMsg := &message.Message{
+		MType: mType,
+	}
+	if responseMessage != "" {
+		newMsg.Error = &message.Error{ Message: responseMessage }
+	}
+	newMsgJson, err := json.Marshal(newMsg)
+	if err != nil {
+		return fmt.Errorf("can not marshal empty response message to json: %w", err)
+	}
+	err = h.safeWriteMessage(conn, websocket.TextMessage, newMsgJson)
+	if err != nil {
+		return fmt.Errorf("can not write empty response message: %w", err)
+	}
+	return nil
+}
+
 func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
-	h.clientRegister(conn)
+	client := h.clientRegister(conn)
 	defer h.clientUnregister(conn)
 	defer conn.Close()
 	pingStopCh := make(chan int)
@@ -158,17 +178,61 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 		if msg.MType == message.MTypePing {
 			continue
 		} else if msg.MType == message.MTypeInAudioConfReq {
-			if msg.InAudioConf == nil {
-				log.Printf("invalid message (no inAudioConf): %v", err)
-				continue
+			if msg.InAudioConf == nil            ||
+			   msg.InAudioConf.Encoding == ""    ||
+			   msg.InAudioConf.SampleRate == 0   ||
+			   msg.InAudioConf.SampleSize == 0   ||
+			   msg.InAudioConf.ChannelCount == 0 ||
+			   msg.InAudioConf.SrcLang == ""     ||
+			   msg.InAudioConf.DstLang == ""     ||
+			   msg.InAudioConf.Gender == ""      {
+				err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "invalid argument")
+				if err != nil {
+					log.Printf("can not write inAudioConfRes message: %v", err)
+					continue
+				}
 			}
+
 			log.Printf("%+v", msg.InAudioConf)
-		} else if msg.MType == message.MTypeInAudioDataReq {
-			if msg.InAudioData == nil {
-				log.Printf("invalid message (no inAudioConf): %v", err)
+			// XXXX translator.translate(msg.InAudioConf)
+
+			client.translating = true
+			err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "")
+			if err != nil {
+				log.Printf("can not write inAudioConfRes message: %v", err)
 				continue
 			}
+		} else if msg.MType == message.MTypeInAudioDataReq {
+			if msg.InAudioData == nil ||
+			   len(msg.InAudioData.DataBytes) == 0 {
+				err := h.sendEmptyMessage(conn, message.MTypeInAudioDataRes, "invalid argument")
+				if err != nil {
+					log.Printf("can not write inAudioDataRes message: %v", err)
+					continue
+				}
+			}
+			if !client.translating {
+				continue
+			}
+
 			log.Printf("%+v", msg.InAudioData)
+			// XXXX translator.translateData(msg.InAudioData)
+
+			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataRes, "")
+			if err != nil {
+				log.Printf("can not write inAudioDataRes message: %v", err)
+				continue
+			}
+		} else if msg.MType == message.MTypeInAudioDataEndReq {
+
+			// XXXX translator.translateDataEnd(msg.InAudioData)
+
+			client.translating = false
+			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataEndRes, "")
+			if err != nil {
+				log.Printf("can not write inAudioDataEndRes message: %v", err)
+				continue
+			}
 		}
 	}
 }

@@ -113,7 +113,7 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 				}
 			}
 		}
-		let message = {
+		const message = {
 			MType: "inAudioDataReq",
 			InAudioData: {
 				DataBytes: Array.from(new Uint8Array(waveArrayBuffer))

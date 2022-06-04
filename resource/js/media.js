@@ -5,22 +5,6 @@ let inputAudioContext = null
 let wsSocket = null
 let lastWaveBytes = []
 
-/*
-ja-JP
-en-US
-en-GB
-en-AU
-en-SG
-fr-FR
-nl-NL
-de-DE
-it-IT
-ko-KR
-ru-RU
-sv-SE
-tr-TR
-*/
-
 let audioInputDevicesVue = new Vue({
 	el: '#div_for_audio_input_devices',
 	data: {
@@ -79,8 +63,42 @@ let noiseSupressionVue = new Vue({
 	}
 });
 
+let inputLanguagesVue = new Vue({
+	el: '#div_for_input_languages',
+	data: {
+		selectedInputLanguage: 'ja-JP',
+	},
+	mounted : function(){
+	},
+	methods: {
+	}
+});
+
+let outputLanguagesVue = new Vue({
+	el: '#div_for_output_languages',
+	data: {
+		selectedOutputLanguage: 'en-US',
+	},
+	mounted : function(){
+	},
+	methods: {
+	}
+});
+
+let outputGenderVue = new Vue({
+	el: '#div_for_output_gender',
+	data: {
+		selectedOutputGender: 'female',
+	},
+	mounted : function(){
+	},
+	methods: {
+	}
+});
+
 window.onload = function() {
 	tryGetUserMedia();
+	connectWebsocket()
 }
 
 function tryGetUserMedia() {
@@ -121,9 +139,58 @@ function getAudioInOutDevices() {
     });
 }
 
+function connectWebsocket() {
+	wsSocket = new WebSocket("wss://" + location.host + location.pathname + "ws/trans", "translation");
+	wsSocket.onopen = event => {
+		console.log("websocket open");
+	};
+	wsSocket.onmessage = event => {
+		console.log("webcosket message");
+		let msg = JSON.parse(event.data);
+		if (msg.MType == "ping") {
+			// nothig to do
+		} else if (msg.MType == "inAudioConfRes") {
+			if (msg.Error && msg.Error.Message != "" ) {
+				console.log("error in inAudioConfRes: " + msg.Error.Message)
+			}
+		} else if (msg.MType == "inAudioDataRes") {
+			if (msg.Error && msg.Error.Message != "" ) {
+				console.log("error in inAudioDataRes: " + msg.Error.Message)
+			}
+		} else if (msg.MType == "inAudioDataEndRes") {
+			if (msg.Error && msg.Error.Message != "" ) {
+				console.log("error in inAudioDataEndRes: " + msg.Error.Message)
+			}
+		}
+	}
+	wsSocket.onerror = event => {
+		console.log("websocket error");
+		console.log(event);
+		wsSocket.close();
+		wsSocket = null;
+		setTimeout(function(){ connectWebsocket() }, 2000);
+	}
+	wsSocket.onclose = event => {
+		console.log("websocket close");
+		console.log(event);
+		wsSocket.close();
+		wsSocket = null;
+		setTimeout(function(){ connectWebsocket() }, 2000);
+	}
+}
+
 function startRecording() {
 	if (audioInputDevicesVue.selectedAudioInputDevice == "" ||
 	    audioOutputDevicesVue.selectedAudioOutputDevice == "") {
+		window.alert("select input/output audio device");
+		return
+	}
+	if (inputLanguagesVue.selectedInputLanguage == outputLanguagesVue.selectedOutputLanguage) {
+		window.alert("Select different languages for input and output");
+		return
+	}
+	if (!wsSocket || wsSocket.readyState != 1) {
+		window.alert("no websocket connection");
 		return
 	}
 	lastWaveBytes = []
@@ -139,7 +206,7 @@ function startRecording() {
 			 autoGainControl: false,
 			 echoCancellation: false }
 	}).then(function(stream) {
-		connectWebsocket(stream);
+		connectWorkletNode(stream)
         })
         .catch(function(err) {
                 console.log("in startRecording: " + err.name + ": " + err.message);
@@ -151,35 +218,16 @@ function stopRecording() {
 		inputAudioContext.close();
 		inputAudioContext = null;
 	}
-	if (wsSocket) {
-		wsSocket.close();
-		wsSocket = null;
-	}
 	const startLamp = document.getElementById('start_lamp');
 	startLamp.setAttribute("class", "border-radius background-color-gray inline-block" )
+	const message = {
+		MType: "inAudioDataEndReq",
+	};
+	wsSocket.send(JSON.stringify(message));
 	createWaveFile()
 }
 
-function connectWebsocket(stream) {
-	wsSocket = new WebSocket("wss://" + location.host + location.pathname + "ws/trans", "translation");
-	wsSocket.onopen = event => {
-		console.log("signaling open");
-		connectWorkletNode(stream, wsSocket)
-	};
-	wsSocket.onmessage = event => {
-		console.log("signaling message");
-	}
-	wsSocket.onerror = event => {
-		console.log("signaling error");
-		console.log(event);
-	}
-	wsSocket.onclose = event => {
-		console.log("signaling close");
-		console.log(event);
-	}
-}
-
-function connectWorkletNode(stream, wsSocket) {
+function connectWorkletNode(stream) {
 	inputAudioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
 	console.log(inputAudioContext.sampleRate)
 	inputAudioContext.audioWorklet.addModule('js/recorder_worklet.js').then(function () {
@@ -193,7 +241,7 @@ function connectWorkletNode(stream, wsSocket) {
 		}
 		recorder.port.postMessage(JSON.stringify(params));
 		recorder.port.onmessage = (event) => {
-			    sendRawData(wsSocket, event);
+			    sendRawData(event);
 		};
                 audioInput.connect(recorder);
                 recorder.connect(inputAudioContext.destination);
@@ -202,7 +250,7 @@ function connectWorkletNode(stream, wsSocket) {
         });
 }
 
-function sendRawData(wsSocket, event) {
+function sendRawData(event) {
 	if (lastWaveBytes.length == 0) {
 		const message = {
                         MType: "inAudioConfReq",
@@ -211,8 +259,9 @@ function sendRawData(wsSocket, event) {
                                 SampleRate:SAMPLE_RATE,
                                 SampleSize:SAMPLE_SIZE,
                                 ChannelCount:CHANNEL_COUNT,
-                                SrcLang: "ja",
-                                DstLang: "en",
+                                SrcLang: inputLanguagesVue.selectedInputLanguage,
+                                DstLang: outputLanguagesVue.selectedOutputLanguage,
+				Gender:  outputGenderVue.selectedOutputGender,
                         }
                 };
 		wsSocket.send(JSON.stringify(message));

@@ -13,6 +13,8 @@ require (
 require (
 	cloud.google.com/go v0.102.0 // indirect
 	cloud.google.com/go/compute v1.6.1 // indirect
+	cloud.google.com/go/speech v1.4.0 // indirect
+	cloud.google.com/go/texttospeech v1.3.0 // indirect
 	cloud.google.com/go/translate v1.2.0 // indirect
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect

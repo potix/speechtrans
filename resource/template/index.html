@@ -12,7 +12,7 @@
 	<body>
 		<p>
 			<div class="inline-block">
-				Audio input devices:
+				Audio input device:
 			</div>
                         <div class="inline-block" id="div_for_audio_input_devices">
                                 <select v-model="selectedAudioInputDevice">
@@ -24,7 +24,7 @@
 		</p>
 		<p>
 			<div class="inline-block">
-				Audio output devices:
+				Audio output device:
 			</div>
 			<div class="inline-block" id="div_for_audio_output_devices">
 				<select v-model="selectedAudioOutputDevice" v-on:change="setSkinId">
@@ -38,6 +38,59 @@
 			<div id="noise-suppression">
 				noise supression
 				<input type="checkbox" v-model="checked" />
+			</div>
+		</p>
+		<p>
+			<div class="inline-block">
+				input language:
+			</div>
+			<div class="inline-block" id="div_for_input_languages">
+				<select v-model="selectedInputLanguage">
+					<option>ja-JP</option>
+					<option>en-US</option>
+					<option>en-GB</option>
+					<option>en-AU</option>
+					<option>en-SG</option>
+					<option>fr-FR</option>
+					<option>nl-NL</option>
+					<option>de-DE</option>
+					<option>it-IT</option>
+					<option>ko-KR</option>
+					<option>ru-RU</option>
+					<option>sv-SE</option>
+					<option>tr-TR</option>
+				</select>
+			</div>
+			<div class="inline-block">
+				output language:
+			</div>
+			<div class="inline-block" id="div_for_output_languages">
+				<select v-model="selectedOutputLanguage">
+					<option>ja-JP</option>
+					<option>en-US</option>
+					<option>en-GB</option>
+					<option>en-AU</option>
+					<option>en-SG</option>
+					<option>fr-FR</option>
+					<option>nl-NL</option>
+					<option>de-DE</option>
+					<option>it-IT</option>
+					<option>ko-KR</option>
+					<option>ru-RU</option>
+					<option>sv-SE</option>
+					<option>tr-TR</option>
+				</select>
+			</div>
+		</p>
+		<p>
+			<div class="inline-block">
+				output gender:
+			</div>
+			<div class="inline-block" id="div_for_output_gender">
+				<select v-model="selectedOutputGender">
+					<option>male</option>
+					<option>female</option>
+				</select>
 			</div>
 		</p>
 		<p>
