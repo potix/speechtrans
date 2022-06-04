@@ -58,7 +58,6 @@ func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAud
         if err != nil {
 		return fmt.Errorf("can not create stream: %v", err)
         }
-	log.Printf(">>> %v, %v, %v", inAudioConf.SampleRate, inAudioConf.SrcLang, inAudioConf.ChannelCount)
         // Send the initial configuration message.
         err = stream.Send(&speechpb.StreamingRecognizeRequest{
 		StreamingRequest: &speechpb.StreamingRecognizeRequest_StreamingConfig{
@@ -181,6 +180,8 @@ func (t *Translator) translateText(ctx context.Context, transConf *message.Trans
         for _, translation := range resp.GetTranslations() {
 		t.dstText = append(t.dstText, translation.GetTranslatedText())
         }
+	log.Printf("srcText = %v", strings.Join(t.srcText, "\n"))
+	log.Printf("dstText = %v", strings.Join(t.dstText, "\n"))
 	return nil
 }
 
@@ -242,6 +243,7 @@ func (t *Translator) Cleanup() {
 	}
 	t.srcText = t.srcText[:0]
 	t.dstText = t.dstText[:0]
+	t.progressInAudio = false
 }
 
 func NewTranslator(projectId string, opts ...TranslatorOption) *Translator {
