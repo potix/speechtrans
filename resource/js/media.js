@@ -9,7 +9,7 @@ let progressInAudio = false
 let silentThreshold = 0.01 // XXX adjust by ui
 let silentCount = 0
 let inAudioStartTime = 0
-let reReqElapsed = 30000  
+let reReqElapsed = 40000  
 let reReqSilentCount = 30 
 
 let audioInputDevicesVue = new Vue({
