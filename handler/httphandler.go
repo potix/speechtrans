@@ -2,7 +2,6 @@
 package handler
 
 import (
-        "io/ioutil"
         "log"
         "fmt"
         "path"
@@ -35,15 +34,16 @@ func HttpVerbose(verbose bool) HttpOption {
 }
 
 type client struct {
-	writeMutex  sync.Mutex
+	writeMutex      sync.Mutex
 	progressInAudio bool
-	translator  *translator.Translator
+	translator      *translator.Translator
 }
 
 type HttpHandler struct {
         verbose      bool
         resourcePath string
         accounts     map[string]string
+	projectId    string
 	clientsMutex sync.Mutex
 	clients      map[*websocket.Conn]*client
 }
@@ -81,8 +81,8 @@ func (h *HttpHandler) indexHtml(c *gin.Context) {
 func (h *HttpHandler) clientRegister(conn *websocket.Conn) *client {
 	h.clientsMutex.Lock()
 	defer h.clientsMutex.Unlock()
-	tVerboseOpt := translator.translatorVerbose(h.verbose)
-	newTranslator := treanslator.NewTranslator(h.projectId, tVerboseOpt)
+	tVerboseOpt := translator.TranslatorVerbose(h.verbose)
+	newTranslator := translator.NewTranslator(h.projectId, tVerboseOpt)
 	h.clients[conn] = &client {
 		progressInAudio: false,
 		translator: newTranslator,
@@ -159,15 +159,23 @@ func (h *HttpHandler) sendEmptyMessage(conn *websocket.Conn, mType string, error
 	return nil
 }
 
-func (h *httpHandler) toTextNotifyCb(conn *websocket.Conn, err error) {
+func (h *HttpHandler) toTextNotifyCb(conn *websocket.Conn, err error) {
 	if err == nil {
 		return
 	}
-	msg := &message.Message {
+	newMsg := &message.Message {
 		MType: message.MTypeToTextNotify,
 		Error: &message.Error{
 			Message: fmt.Sprintf("%v", err),
 		},
+	}
+	newMsgJson, err := json.Marshal(newMsg)
+	if err != nil {
+		log.Printf("can not marshal toText notify message to json: %v", err)
+	}
+	err = h.safeWriteMessage(conn, websocket.TextMessage, newMsgJson)
+	if err != nil {
+		log.Printf("can not write toText notify message: %v", err)
 	}
 }
 
@@ -178,7 +186,7 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 	pingStopCh := make(chan int)
 	go h.startPingLoop(conn, pingStopCh)
 	defer close(pingStopCh)
-	defer client.translator.Clean()
+	defer client.translator.Cleanup()
 	for {
 		t, msgJson, err := conn.ReadMessage()
 		if err != nil {
@@ -201,9 +209,7 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 			   msg.InAudioConf.SampleRate == 0   ||
 			   msg.InAudioConf.SampleSize == 0   ||
 			   msg.InAudioConf.ChannelCount == 0 ||
-			   msg.InAudioConf.SrcLang == ""     ||
-			   msg.InAudioConf.DstLang == ""     ||
-			   msg.InAudioConf.Gender == ""      {
+			   msg.InAudioConf.SrcLang == ""     {
 				err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "invalid argument")
 				if err != nil {
 					log.Printf("can not write inAudioConfRes message: %v", err)
@@ -218,7 +224,7 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 				}
 			}
 log.Printf("start %v", msg.InAudioConf)
-			translator.ToText(conn, inAudioConf, h.toTextNotifyCb)
+			client.translator.ToText(conn, msg.InAudioConf, h.toTextNotifyCb)
 			client.progressInAudio = true
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "")
 			if err != nil {
@@ -237,8 +243,8 @@ log.Printf("start %v", msg.InAudioConf)
 			if !client.progressInAudio {
 				continue
 			}
-log.Printf("len = %v", len(msg.InAudioData))
-			translator.ToTextContent(msg.InAudioData)
+log.Printf("len = %v", len(msg.InAudioData.DataBytes))
+			client.translator.ToTextContent(msg.InAudioData.DataBytes)
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataRes, "")
 			if err != nil {
 				log.Printf("can not write inAudioDataRes message: %v", err)
@@ -249,14 +255,14 @@ log.Printf("len = %v", len(msg.InAudioData))
 				continue
 			}
 log.Printf("end")
-			translator.ToTextContentEnd()
+			client.translator.ToTextContentEnd()
 			client.progressInAudio = false
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataEndRes, "")
 			if err != nil {
 				log.Printf("can not write inAudioDataEndRes message: %v", err)
 				continue
 			}
-		} else if msg.MType == message.MTypeMTypeTranslateReq {
+		} else if msg.MType == message.MTypeTranslateReq {
 			if msg.TransConf == nil        ||
 			   msg.TransConf.SrcLang == "" ||
 			   msg.TransConf.DstLang == "" ||
@@ -267,9 +273,9 @@ log.Printf("end")
 					continue
 				}
 			}
-			outAudioDataBytes, outAudioEncoding, err := translator.Translate(msg.TransConf)
+			outAudioDataBytes, outAudioEncoding, err := client.translator.Translate(msg.TransConf)
 			if err != nil {
-				err := h.sendEmptyMessage(conn, message.MTypeTranslateRes, fmt.Errorf("can not translate", err))
+				err := h.sendEmptyMessage(conn, message.MTypeTranslateRes, fmt.Sprintf("can not translate: %v", err))
 				if err != nil {
 					log.Printf("can not write translateRes message: %v", err)
 					continue
