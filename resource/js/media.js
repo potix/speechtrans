@@ -1,9 +1,10 @@
-const SAMPLE_RATE=48000
+const SAMPLE_RATE=16000
 const SAMPLE_SIZE=16
 const CHANNEL_COUNT=1
 let inputAudioContext = null
 let wsSocket = null
 let lastWaveBytes = []
+let progressInAudio = false
 
 let audioInputDevicesVue = new Vue({
 	el: '#div_for_audio_input_devices',
@@ -161,27 +162,30 @@ function connectWebsocket() {
 			if (msg.Error && msg.Error.Message != "" ) {
 				console.log("error in inAudioDataEndRes: " + msg.Error.Message)
 			}
-		} else if (msg.MType == "outAudioReq") {
-			if (!msg.OutAudio          ||
-			    !msg.OutAudio.Encoding ||
-			    !msg.OutAudio.DataBytes ||
-			    msg.OutAudio.DataBytes.length == 0 ) {
-				console.log("invalid outAudioReq")
+		} else if (msg.MType == "toTextNotify") {
+			if (msg.Error && msg.Error.Message != "" ) {
+				console.log("error in toTextNotify: " + msg.Error.Message)
+			}
+		} else if (msg.MType == "translateRes") {
+			if (msg.Error && msg.Error.Message != "" ) {
+				console.log("error in translateRes: " + msg.Error.Message)
+			}
+			if (!msg.TransResult          ||
+			    !msg.TransResult.Encoding ||
+			    !msg.TransResult.DataBytes ||
+			    msg.TransResult.DataBytes.length == 0 ) {
+				console.log("invalid result data in translateRes")
 				return
 			}
-			const message = {
-				MType: "outAudioRes",
-			};
-			wsSocket.send(JSON.stringify(message));
 			// go言語のjson marshalが[]bytesをbase64する仕様があるのでそのままdata uriにする
 			let mineType
-			if (msg.OutAudio.Encoding == "mp3") {
+			if (msg.TransResult.Encoding == "mp3") {
 				mineType = "audio/mp3"
-			} else if (msg.OutAudio.Encoding == "oggOpus") {
+			} else if (msg.TransResult.Encoding == "oggOpus") {
 				mineType = "audio/ogg; codecs=opus"
 			}
 			const outAudio = document.getElementById('output_audio');
-       			outAudio.src = "data:" + mineType + ";base64," + msg.OutAudio.DataBytes;
+       			outAudio.src = "data:" + mineType + ";base64," + msg.TransResult.DataBytes;
 			outAudio.play();
 		} else {
 			console.log("unsupported message type: " + msg.MType);
@@ -217,6 +221,11 @@ function startRecording() {
 		window.alert("no websocket connection");
 		return
 	}
+	if (progressInAudio == true) {
+		console.log("already recording in progress");
+		return
+	}
+	progressInAudio = true
 	lastWaveBytes = []
 	console.log(audioInputDevicesVue.selectedAudioInputDevice);
 	console.log(audioOutputDevicesVue.selectedAudioOutputDevice);
@@ -234,6 +243,7 @@ function startRecording() {
         })
         .catch(function(err) {
                 console.log("in startRecording: " + err.name + ": " + err.message);
+		stopRecording()
         });
 }
 
@@ -248,7 +258,17 @@ function stopRecording() {
 		MType: "inAudioDataEndReq",
 	};
 	wsSocket.send(JSON.stringify(message));
+	const message = {
+		MType: "translateReq",
+		TransConf: {
+			SrcLang: inputLanguagesVue.selectedInputLanguage,
+			DstLang: outputLanguagesVue.selectedOutputLanguage,
+			Gender:  outputGenderVue.selectedOutputGender,
+		}
+	};
+	wsSocket.send(JSON.stringify(message));
 	createWaveFile()
+	progressInAudio = false
 }
 
 function connectWorkletNode(stream) {
@@ -271,6 +291,10 @@ function connectWorkletNode(stream) {
                 recorder.connect(inputAudioContext.destination);
 		const startLamp = document.getElementById('start_lamp');
 		startLamp.setAttribute("class", "border-radius background-color-red inline-block" )
+        })
+	.catch(function(err) {
+                console.log("in connectWorkletNode: " + err.name + ": " + err.message);
+		stopRecording()
         });
 }
 
@@ -284,18 +308,20 @@ function sendRawData(event) {
                                 SampleSize:SAMPLE_SIZE,
                                 ChannelCount:CHANNEL_COUNT,
                                 SrcLang: inputLanguagesVue.selectedInputLanguage,
-                                DstLang: outputLanguagesVue.selectedOutputLanguage,
-				Gender:  outputGenderVue.selectedOutputGender,
                         }
                 };
 		wsSocket.send(JSON.stringify(message));
 	}
 	wsSocket.send(event.data);
 	const message = JSON.parse(event.data);
+	console.log(message.InAudioData.NormMax + " > v > " message.InAudioData.NormMin)
 	lastWaveBytes =	lastWaveBytes.concat(message.InAudioData.DataBytes);
 }
 
 function createWaveFile() {
+	if (lastWaveBytes.length == 0) {
+		return
+	}
 	let arrayBuffer = new ArrayBuffer(4 + 4 + 4 + 4 + 4 + 2 + 2 + 4 + 4 + 2 + 2 + 4 + 4 + lastWaveBytes.length)
 	let dataView = new DataView(arrayBuffer);
 	let offset = 0

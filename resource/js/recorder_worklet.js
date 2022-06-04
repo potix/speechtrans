@@ -52,7 +52,9 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 		return [ hv, value & 0xff ]
 	}
         process(inputs, outputs, parameters) {
-		//console.log(inputs)
+		//console.log(inputs)a
+		let rawMax = 0
+		let rawMin = 0
 		let minValue = 0
 		let maxValue = 255
 		let unsigned = true
@@ -92,6 +94,11 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 			}
 			for (let idx3 = 0, idx4 = 0; idx3 < inChannelDataLen; idx3 += 1, idx4 += inChannelsLen) {
 				for (let idx2 = 0; idx2 < inChannelsLen; idx2 += 1) {
+					if (inputs[idx1][idx2][idx3]  > rawMax) {
+						rawMax = inputs[idx1][idx2][idx3]
+					} else if (inputs[idx1][idx2][idx3]  < rawMin) {
+						rawMin = inputs[idx1][idx2][idx3]
+					}
 					if (waveValues[idx4 + idx2]) {
 						const newWaveValue = this.convertRawToWave(inputs[idx1][idx2][idx3], minValue, maxValue, unsigned)
 						waveValues[idx4 + idx2] = this.mixWave(waveValues[idx4 + idx2], newWaveValue, minValue, maxValue)
@@ -116,7 +123,9 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 		const message = {
 			MType: "inAudioDataReq",
 			InAudioData: {
-				DataBytes: Array.from(new Uint8Array(waveArrayBuffer))
+				DataBytes: Array.from(new Uint8Array(waveArrayBuffer)),
+				NormMin:   rawMin,
+				NormMax:   rawMax,
 			}
 		}
 		this.port.postMessage(JSON.stringify(message));

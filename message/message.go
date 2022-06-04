@@ -10,8 +10,10 @@ const (
 	MTypeInAudioDataEndReq     = "inAudioDataEndReq"  // server <-----  clinet
 	MTypeInAudioDataEndRes     = "inAudioDataEndRes"  // server  -----> clinet
 
-	MTypeOutAudioReq           = "outAudioReq"        // server  -----> clinet
-	MTypeOutAudioRes           = "outAudioRes"        // server <-----  clinet
+        MTypeToTextNotify          = "toTextNotify"       // server  -----> client
+
+	MTypeTranslateReq          = "translateReq"       // server <-----  clinet
+	MTypeTranslateRes          = "translateRes"       // server  -----> clinet
 )
 
 const (
@@ -21,11 +23,12 @@ const (
 )
 
 type Message struct {
-	MType        string
-	Error        *Error
-	InAudioConf  *InAudioConf
-	InAudioData  *InAudioData
-	OutAudio     *OutAudio
+	MType         string
+	Error         *Error
+	InAudioConf   *InAudioConf
+	InAudioData   *InAudioData
+	TransConf     *TransConf
+	TransResult   *TransResult
 }
 
 type Error struct {
@@ -38,15 +41,26 @@ type InAudioConf struct {
 	SampleSize   int
 	ChannelCount int
 	SrcLang      string
-	DstLang      string
-	Gender       string
 }
 
 type InAudioData struct {
 	DataBytes []byte
+	NormMin   float64
+	NormMax   float64
 }
 
 type OutAudio struct {
+	Encoding string
+	DataBytes []byte
+}
+
+type TransConf struct {
+	SrcLang      string
+	DstLang      string
+	Gender       string
+}
+
+type TransResult struct {
 	Encoding string
 	DataBytes []byte
 }

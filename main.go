@@ -22,6 +22,7 @@ type speechtransHttpServerConfig struct {
 type speechtransHttpHandlerConfig struct {
         ResourcePath string            `toml:"resourcePath"`
         Accounts     map[string]string `toml:"accounts"`
+        ProjectId    string            `toml:"projectId"`
 }
 
 type speechtransLogConfig struct {
@@ -80,6 +81,7 @@ func main() {
 	newHttpHandler, err := handler.NewHttpHandler(
                 conf.HttpHandler.ResourcePath,
                 conf.HttpHandler.Accounts,
+		conf.HttpHandler.ProjectId,
                 hhVerboseOpt,
         )
         if err != nil {

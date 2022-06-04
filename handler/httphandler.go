@@ -36,7 +36,7 @@ func HttpVerbose(verbose bool) HttpOption {
 type client struct {
 	writeMutex  sync.Mutex
 	progressInAudio bool
-	progressOutAudio bool
+	translator  *translator.Translator
 }
 
 type HttpHandler struct {
@@ -80,7 +80,12 @@ func (h *HttpHandler) indexHtml(c *gin.Context) {
 func (h *HttpHandler) clientRegister(conn *websocket.Conn) *client {
 	h.clientsMutex.Lock()
 	defer h.clientsMutex.Unlock()
-	h.clients[conn] = new(client)
+	tVerboseOpt := translator.translatorVerbose(h.verbose)
+	newTranslator := treanslator.NewTranslator(h.projectId, tVerboseOpt)
+	h.clients[conn] = &client {
+		progressInAudio: false,
+		translator: newTranslator,
+	}
 	return h.clients[conn]
 }
 
@@ -135,22 +140,34 @@ func (h *HttpHandler) startPingLoop(conn *websocket.Conn, pingLoopStopChan chan 
 	}
 }
 
-func (h *HttpHandler) sendEmptyMessage(conn *websocket.Conn, mType string, responseMessage string) error {
+func (h *HttpHandler) sendEmptyMessage(conn *websocket.Conn, mType string, errorMessage string) error {
 	newMsg := &message.Message{
 		MType: mType,
 	}
-	if responseMessage != "" {
-		newMsg.Error = &message.Error{ Message: responseMessage }
+	if errorMessage != "" {
+		newMsg.Error = &message.Error{ Message: errorMessage }
 	}
 	newMsgJson, err := json.Marshal(newMsg)
 	if err != nil {
-		return fmt.Errorf("can not marshal empty response message to json: %w", err)
+		return fmt.Errorf("can not marshal empty message to json: %w", err)
 	}
 	err = h.safeWriteMessage(conn, websocket.TextMessage, newMsgJson)
 	if err != nil {
-		return fmt.Errorf("can not write empty response message: %w", err)
+		return fmt.Errorf("can not write empty message: %w", err)
 	}
 	return nil
+}
+
+func (h *httpHandler) toTextNotifyCb(conn *websocket.Conn, err error) {
+	if err == nil {
+		return
+	}
+	msg := &message.Message {
+		MType: message.MTypeToTextNotify,
+		Error: &message.Error{
+			Message: fmt.Sprintf("%v", err)
+		},
+	}
 }
 
 func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
@@ -160,9 +177,7 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 	pingStopCh := make(chan int)
 	go h.startPingLoop(conn, pingStopCh)
 	defer close(pingStopCh)
-
-	// XXX new translator
-
+	defer client.translator.Clean()
 	for {
 		t, msgJson, err := conn.ReadMessage()
 		if err != nil {
@@ -194,10 +209,16 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 					continue
 				}
 			}
-
-			//log.Printf("%+v", msg.InAudioConf)
-			// XXXX translator.translate(msg.InAudioConf)
-
+			if client.progressInAudio {
+				err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "already tranlate in progess")
+				if err != nil {
+					log.Printf("can not write inAudioConfRes message: %v", err)
+					continue
+				}
+			}
+log.Printf("start %v", msg.InAudioConf)
+			client.srcText = ""
+			translator.ToText(conn, inAudioConf, h.toTextNotifyCb))
 			client.progressInAudio = true
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "")
 			if err != nil {
@@ -216,60 +237,59 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 			if !client.progressInAudio {
 				continue
 			}
-
-			//log.Printf("%+v", msg.InAudioData)
-			// XXXX translator.translateData(msg.InAudioData)
-
+log.Printf("len = %v", len(msg.InAudioData))
+			translator.ToTextContent(msg.InAudioData)
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataRes, "")
 			if err != nil {
 				log.Printf("can not write inAudioDataRes message: %v", err)
 				continue
 			}
 		} else if msg.MType == message.MTypeInAudioDataEndReq {
-
-			// XXXX translator.translateDataEnd(msg.InAudioData)
-
+			if !client.progressInAudio {
+				continue
+			}
+log.Printf("end")
+			translator.ToTextContentEnd()
 			client.progressInAudio = false
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataEndRes, "")
 			if err != nil {
 				log.Printf("can not write inAudioDataEndRes message: %v", err)
 				continue
 			}
-
-
-
-
-			/* XXXX test code */
-			bytes, err := ioutil.ReadFile("output.ogg")
-			if err != nil {
-				 log.Printf("can not open out audio file: %v", err)
-				 continue
+		} else if msg.MType == message.MTypeMTypeTranslateReq {
+			if msg.TransConf == nil        ||
+			   msg.TransConf.SrcLang == "" ||
+			   msg.TransConf.DstLang == "" ||
+			   msg.TransConf.Gender == "" {
+				err := h.sendEmptyMessage(conn, message.MTypeTranslateRes, "invalid argument")
+				if err != nil {
+					log.Printf("can not write translateRes message: %v", err)
+					continue
+				}
 			}
-			newMsg := &message.Message{
-				MType: message.MTypeOutAudioReq,
-				OutAudio: &message.OutAudio {
-					Encoding: "oggOpus",
-					DataBytes: bytes,
-				},
+			outAudioDataBytes, outAudioEncoding, err := translator.Translate(msg.TransConf)
+			if err != nil {
+				err := h.sendEmptyMessage(conn, message.MTypeTranslateRes, fmt.Errorf("can not translate", err))
+				if err != nil {
+					log.Printf("can not write translateRes message: %v", err)
+					continue
+				}
+			}
+			newMsg := &message.Message {
+				MType: message.MTypeTranslateRes,
+				TransResult: &message.TransResult{
+					Encoding: outAudioEncoding,
+					DataBytes: outAudioDataBytes,
+				}
 			}
 			newMsgJson, err := json.Marshal(newMsg)
 			if err != nil {
-				log.Printf("can not marshal outAudioDataReq message to json: %v", err)
+				log.Printf("can not marshal translate response message to json: %v", err)
 				continue
 			}
 			err = h.safeWriteMessage(conn, websocket.TextMessage, newMsgJson)
 			if err != nil {
-				log.Printf("can not write outAudioDataReq message: %v", err)
-				continue
-			}
-
-
-
-
-
-		} else if msg.MType == message.MTypeOutAudioRes {
-			if (msg.Error != nil && msg.Error.Message != "") {
-				log.Printf("error in outAudioDataRes message: %v", msg.Error.Message)
+				log.Printf("can not write translate response message: %v", err)
 				continue
 			}
 		} else {
@@ -293,7 +313,7 @@ func (h *HttpHandler) translation(c *gin.Context) {
 	go h.translationLoop(conn)
 }
 
-func NewHttpHandler(resourcePath string, accounts map[string]string, opts ...HttpOption) (*HttpHandler, error) {
+func NewHttpHandler(resourcePath string, accounts map[string]string, projectId string, opts ...HttpOption) (*HttpHandler, error) {
         baseOpts := defaultHttpOptions()
         for _, opt := range opts {
                 if opt == nil {
@@ -305,6 +325,7 @@ func NewHttpHandler(resourcePath string, accounts map[string]string, opts ...Htt
                 verbose:          baseOpts.verbose,
                 resourcePath:     resourcePath,
                 accounts:         accounts,
+		projectId:        projectId,
 		clients:          make(map[*websocket.Conn]*client),
         }, nil
 }

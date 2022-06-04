@@ -38,5 +38,6 @@ func translateText(projectID string, sourceLang string, targetLang string, conte
 }
 
 func main() {
-	 translateText("clipper-255807", "en-us", "ja", []string{"hello, world!", "I am hungry."})
+	 //translateText("clipper-255807", "en-us", "ja", []string{"hello, world!", "I am hungry."})
+	 translateText("clipper-255807", "ja-JP", "en", []string{"おはようございます今日はいい天気ですねそれにしてもお腹が空きました"})
 }
