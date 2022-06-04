@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"context"
+	"io"
 
 	"github.com/potix/speechtrans/message"
+	"github.com/gorilla/websocket"
 
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	speech "cloud.google.com/go/speech/apiv1"
@@ -37,6 +39,7 @@ func TranslatorVerbose(verbose bool) TranslatorOption {
 
 type Translator struct {
 	opts            *translatorOptions
+	projectId       string
 	progressInAudio bool
 	inAudioDataCh   chan []byte
 	srcText         []string
@@ -89,7 +92,7 @@ func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAud
 			}
 			err := stream.Send(&speechpb.StreamingRecognizeRequest{
 				StreamingRequest: &speechpb.StreamingRecognizeRequest_AudioContent{
-					AudioContent: buf,
+					AudioContent: buff,
 				},
 			})
 			if err != nil {
@@ -118,6 +121,7 @@ func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAud
                         }
 		}
 	}
+	return nil
 }
 
 func (t *Translator) ToText(conn *websocket.Conn, inAudioConf *message.InAudioConf, toTextNotifyCb func(*websocket.Conn, error)) {
@@ -159,8 +163,8 @@ func (t *Translator) translateText(ctx context.Context, transConf *message.Trans
         defer client.Close()
         req := &translatepb.TranslateTextRequest{
             Parent: fmt.Sprintf("projects/%s/locations/global", t.projectId),
-            SourceLanguageCode: translateConf.srcLang,
-            TargetLanguageCode: translateConf.dstLang,
+            SourceLanguageCode: transConf.SrcLang,
+            TargetLanguageCode: transConf.DstLang,
             MimeType:           "text/plain",
             Contents:           t.srcText,
         }
@@ -169,17 +173,18 @@ func (t *Translator) translateText(ctx context.Context, transConf *message.Trans
                 return fmt.Errorf(" can not translate text: %v", err)
         }
         for _, translation := range resp.GetTranslations() {
-		t.dstText = append(t.dstText. translation.GetTranslatedText())
+		t.dstText = append(t.dstText, translation.GetTranslatedText())
         }
+	return nil
 }
 
-func  (t *Translator) textToSpeech(ctx context.Context, transConf *message.TransConf) error {
+func  (t *Translator) textToSpeech(ctx context.Context, transConf *message.TransConf) ([]byte, string, error) {
         client, err := texttospeech.NewClient(ctx)
         if err != nil {
-		return fmt.Errorf("can not create text to speech client: %v", err)
+		return []byte{}, "", fmt.Errorf("can not create text to speech client: %v", err)
         }
         defer client.Close()
-	name = ""
+	name := ""
 	voiceName, ok := t.voiceMap[strings.ToLower(transConf.DstLang + ":" + transConf.Gender)]
 	if ok {
 		name = voiceName
@@ -203,12 +208,12 @@ func  (t *Translator) textToSpeech(ctx context.Context, transConf *message.Trans
         }
         resp, err := client.SynthesizeSpeech(ctx, &req)
         if err != nil {
-		return fmt.Errorf("can not synthesize speech: %v", err)
+		return []byte{}, "", fmt.Errorf("can not synthesize speech: %v", err)
         }
 	return resp.AudioContent, message.EncodingOggOpus, nil
 }
 
-func (t *Translator) Translate(transConf *message.TransConf) ([]byte, string, err) {
+func (t *Translator) Translate(transConf *message.TransConf) ([]byte, string, error) {
 	defer func() {
 		t.srcText = t.srcText[:0]
 		t.dstText = t.dstText[:0]
@@ -218,7 +223,7 @@ func (t *Translator) Translate(transConf *message.TransConf) ([]byte, string, er
 	if err != nil {
 		return  []byte{}, "", fmt.Errorf("can not translate: %w", err)
 	}
-	outAudioDataBytes, outAudioEncoding, err = t.textToSpeech(ctx, transConf)
+	outAudioDataBytes, outAudioEncoding, err := t.textToSpeech(ctx, transConf)
 	if err != nil {
 		return  []byte{}, "", fmt.Errorf("can not convert text to audio: %v", err)
 	}

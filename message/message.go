@@ -37,9 +37,9 @@ type Error struct {
 
 type InAudioConf struct {
 	Encoding     string
-	SampleRate   int
-	SampleSize   int
-	ChannelCount int
+	SampleRate   int32
+	SampleSize   int32
+	ChannelCount int32
 	SrcLang      string
 }
 
