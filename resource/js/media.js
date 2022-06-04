@@ -161,6 +161,30 @@ function connectWebsocket() {
 			if (msg.Error && msg.Error.Message != "" ) {
 				console.log("error in inAudioDataEndRes: " + msg.Error.Message)
 			}
+		} else if (msg.MType == "outAudioReq") {
+			if (!msg.OutAudio          ||
+			    !msg.OutAudio.Encoding ||
+			    !msg.OutAudio.DataBytes ||
+			    msg.OutAudio.DataBytes.length == 0 ) {
+				console.log("invalid outAudioReq")
+				return
+			}
+			const message = {
+				MType: "outAudioRes",
+			};
+			wsSocket.send(JSON.stringify(message));
+			// go言語のjson marshalが[]bytesをbase64する仕様があるのでそのままdata uriにする
+			let mineType
+			if (msg.OutAudio.Encoding == "mp3") {
+				mineType = "audio/mp3"
+			} else if (msg.OutAudio.Encoding == "oggOpus") {
+				mineType = "audio/ogg; codecs=opus"
+			}
+			const outAudio = document.getElementById('output_audio');
+       			outAudio.src = "data:" + mineType + ";base64," + msg.OutAudio.DataBytes;
+			outAudio.play();
+		} else {
+			console.log("unsupported message type: " + msg.MType);
 		}
 	}
 	wsSocket.onerror = event => {

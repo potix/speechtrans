@@ -36,7 +36,7 @@ func main() {
                 },
                 // Select the type of audio file you want returned.
                 AudioConfig: &texttospeechpb.AudioConfig{
-                        AudioEncoding: texttospeechpb.AudioEncoding_MP3,
+                        AudioEncoding: texttospeechpb.AudioEncoding_OGG_OPUS,
                 },
         }
 
@@ -46,7 +46,7 @@ func main() {
         }
 
         // The resp's AudioContent is binary.
-        filename := "output.mp3"
+        filename := "output.ogg"
         err = ioutil.WriteFile(filename, resp.AudioContent, 0644)
         if err != nil {
                 log.Fatal(err)

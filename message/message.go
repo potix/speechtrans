@@ -10,23 +10,22 @@ const (
 	MTypeInAudioDataEndReq     = "inAudioDataEndReq"  // server <-----  clinet
 	MTypeInAudioDataEndRes     = "inAudioDataEndRes"  // server  -----> clinet
 
-	MTypeOutAudioConfReq       = "outAudioConfReq"    // server  -----> clinet
-	MTypeOutAudioConfRes       = "outAudioConfRes"    // server <-----  clinet
-	MTypeOutAudioDataReq       = "outAudioDataReq"    // server  -----> clinet
-	MTypeOutAudioDataRes       = "outAudioDataRes"    // server <-----  clinet
-	MTypeOutAudioDataEndReq    = "outAudioDataEndReq" // server  -----> clinet
-	MTypeOutAudioDataEndRes    = "outAudioDataEndRes" // server <-----  clinet
+	MTypeOutAudioReq           = "outAudioReq"        // server  -----> clinet
+	MTypeOutAudioRes           = "outAudioRes"        // server <-----  clinet
 )
 
 const (
-	EncodingWave string = "wave"
+	EncodingWave    string  = "wave"
+	EncodingMp3     string  = "mp3"
+	EncodingOggOpus string  = "oggOpus"
 )
 
 type Message struct {
-	MType       string
-	Error       *Error
-	InAudioConf *InAudioConf
-	InAudioData *InAudioData
+	MType        string
+	Error        *Error
+	InAudioConf  *InAudioConf
+	InAudioData  *InAudioData
+	OutAudio     *OutAudio
 }
 
 type Error struct {
@@ -47,10 +46,7 @@ type InAudioData struct {
 	DataBytes []byte
 }
 
-type OutAudioConf struct {
+type OutAudio struct {
 	Encoding string
-}
-
-type OutAudioData struct {
 	DataBytes []byte
 }

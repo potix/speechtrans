@@ -2,6 +2,7 @@
 package handler
 
 import (
+        "io/ioutil"
         "log"
         "fmt"
         "path"
@@ -34,7 +35,8 @@ func HttpVerbose(verbose bool) HttpOption {
 
 type client struct {
 	writeMutex  sync.Mutex
-	translating bool
+	progressInAudio bool
+	progressOutAudio bool
 }
 
 type HttpHandler struct {
@@ -193,10 +195,10 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 				}
 			}
 
-			log.Printf("%+v", msg.InAudioConf)
+			//log.Printf("%+v", msg.InAudioConf)
 			// XXXX translator.translate(msg.InAudioConf)
 
-			client.translating = true
+			client.progressInAudio = true
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "")
 			if err != nil {
 				log.Printf("can not write inAudioConfRes message: %v", err)
@@ -211,11 +213,11 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 					continue
 				}
 			}
-			if !client.translating {
+			if !client.progressInAudio {
 				continue
 			}
 
-			log.Printf("%+v", msg.InAudioData)
+			//log.Printf("%+v", msg.InAudioData)
 			// XXXX translator.translateData(msg.InAudioData)
 
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataRes, "")
@@ -227,12 +229,51 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 
 			// XXXX translator.translateDataEnd(msg.InAudioData)
 
-			client.translating = false
+			client.progressInAudio = false
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioDataEndRes, "")
 			if err != nil {
 				log.Printf("can not write inAudioDataEndRes message: %v", err)
 				continue
 			}
+
+
+
+
+			/* XXXX test code */
+			bytes, err := ioutil.ReadFile("output.ogg")
+			if err != nil {
+				 log.Printf("can not open out audio file: %v", err)
+				 continue
+			}
+			newMsg := &message.Message{
+				MType: message.MTypeOutAudioReq,
+				OutAudio: &message.OutAudio {
+					Encoding: "oggOpus",
+					DataBytes: bytes,
+				},
+			}
+			newMsgJson, err := json.Marshal(newMsg)
+			if err != nil {
+				log.Printf("can not marshal outAudioDataReq message to json: %v", err)
+				continue
+			}
+			err = h.safeWriteMessage(conn, websocket.TextMessage, newMsgJson)
+			if err != nil {
+				log.Printf("can not write outAudioDataReq message: %v", err)
+				continue
+			}
+
+
+
+
+
+		} else if msg.MType == message.MTypeOutAudioRes {
+			if (msg.Error != nil && msg.Error.Message != "") {
+				log.Printf("error in outAudioDataRes message: %v", msg.Error.Message)
+				continue
+			}
+		} else {
+			log.Printf("unsupported message type: %v", msg.MType)
 		}
 	}
 }
