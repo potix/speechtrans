@@ -39,12 +39,13 @@ func TranslatorVerbose(verbose bool) TranslatorOption {
 
 type Translator struct {
 	opts            *translatorOptions
-	projectId       string
-	progressInAudio bool
-	inAudioDataCh   chan []byte
-	srcText         []string
-	dstText         []string
-	voiceMap        map[string]string
+	projectId        string
+	progressInAudio  bool
+	inAudioDataCh    chan []byte
+	toTextCompWaitCh chan int
+	srcText          []string
+	dstText          []string
+	voiceMap         map[string]string
 }
 
 func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAudioConf, inAudioDataCh chan []byte) (error) {
@@ -90,6 +91,7 @@ func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAud
                                 }
 				return
 			}
+			log.Printf("recv input audio data (len = %v)", len(buff))
 			err := stream.Send(&speechpb.StreamingRecognizeRequest{
 				StreamingRequest: &speechpb.StreamingRecognizeRequest_AudioContent{
 					AudioContent: buff,
@@ -130,12 +132,14 @@ func (t *Translator) ToText(conn *websocket.Conn, inAudioConf *message.InAudioCo
 	}
 	t.progressInAudio = true
 	t.inAudioDataCh = make(chan []byte)
+	t.toTextCompWaitCh = make(chan int)
 	go func() {
 		ctx := context.Background()
 		err := t.speechToText(ctx, inAudioConf, t.inAudioDataCh)
 		if err != nil {
 			toTextNotifyCb(conn, fmt.Errorf("can not convert audio to text: %w", err))
 		}
+		close(t.toTextCompWaitCh)
 	}()
 }
 
@@ -144,6 +148,7 @@ func (t *Translator) ToTextContent(dataBytes []byte) {
 		return
 	}
 	t.inAudioDataCh <- dataBytes
+	log.Printf("send input audio data (len = %v)", len(t.inAudioDataCh))
 }
 
 func (t *Translator) ToTextContentEnd() {
@@ -151,6 +156,7 @@ func (t *Translator) ToTextContentEnd() {
 		return
 	}
 	close(t.inAudioDataCh)
+	<-t.toTextCompWaitCh
 	t.inAudioDataCh = nil
 	t.progressInAudio = false
 }

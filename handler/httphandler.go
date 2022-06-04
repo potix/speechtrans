@@ -263,6 +263,7 @@ log.Printf("end")
 				continue
 			}
 		} else if msg.MType == message.MTypeTranslateReq {
+log.Printf("translate")
 			if msg.TransConf == nil        ||
 			   msg.TransConf.SrcLang == "" ||
 			   msg.TransConf.DstLang == "" ||

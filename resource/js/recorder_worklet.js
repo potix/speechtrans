@@ -124,8 +124,8 @@ class RecorderWorkletProcessor extends AudioWorkletProcessor {
 			MType: "inAudioDataReq",
 			InAudioData: {
 				DataBytes: Array.from(new Uint8Array(waveArrayBuffer)),
-				NormMin:   rawMin,
-				NormMax:   rawMax,
+				NormMin: rawMin,
+				NormMax: rawMax,
 			}
 		}
 		this.port.postMessage(JSON.stringify(message));
