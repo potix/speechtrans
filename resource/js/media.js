@@ -5,8 +5,12 @@ let inputAudioContext = null
 let wsSocket = null
 let lastWaveBytes = []
 let progressInAudio = false
-let silentThreshold = 0.01
+// re-request parameters
+let silentThreshold = 0.01 // XXX adjust by ui
 let silentCount = 0
+let inAudioStartTime = 0
+let reReqElapsed = 30000  
+let reReqSilentCount = 30 
 
 let audioInputDevicesVue = new Vue({
 	el: '#div_for_audio_input_devices',
@@ -300,12 +304,9 @@ function connectWorkletNode(stream) {
         });
 }
 
-// レコードが開始してから30秒経った後に無音の状態(silentCountが100以上)が検出されたら、
-// 一度inAudioDataEndReqを送ってそれまでのテキストを確定してから
-// もう一度,inAudioConfReqを送りinAudioDataReq 送りなおすようにすると録音を永久に続けられる算段
-
 function sendRawData(event) {
 	if (lastWaveBytes.length == 0) {
+		inAudioStartTime = Date.now();
 		const newMessage = {
                         MType: "inAudioConfReq",
                         InAudioConf: {
@@ -322,14 +323,39 @@ function sendRawData(event) {
 	const message = JSON.parse(event.data);
 	lastWaveBytes =	lastWaveBytes.concat(message.InAudioData.DataBytes);
 	// check silent
+	const elapsed = Date.now() - inAudioStartTime
 	if (silentThreshold > message.InAudioData.NormMax &&  message.InAudioData.NormMin > -1 * silentThreshold) {
 		silentCount += 1
 	} else {
 		if (silentCount != 0) {
-			console.log("continus silent count" + silentCount);
+			console.log("continuous silentcount: " + silentCount);
 		}
 		silentCount = 0
 	}
+	if (elapsed > reReqElapsed && silentCount > reReqSilentCount) {
+		reRequest()
+	}
+}
+
+function reRequest() {
+	console.log("re-request");
+	let message = {
+		MType: "inAudioDataEndReq",
+	};
+	wsSocket.send(JSON.stringify(message));
+	inAudioStartTime = Date.now();
+	silentCount = 0
+	newMessage = {
+		MType: "inAudioConfReq",
+		InAudioConf: {
+			Encoding:"wave",
+			SampleRate:SAMPLE_RATE,
+			SampleSize:SAMPLE_SIZE,
+			ChannelCount:CHANNEL_COUNT,
+			SrcLang: inputLanguagesVue.selectedInputLanguage,
+		}
+	};
+	wsSocket.send(JSON.stringify(newMessage));
 }
 
 function createWaveFile() {
