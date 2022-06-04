@@ -327,9 +327,6 @@ function sendRawData(event) {
 	if (silentThreshold > message.InAudioData.NormMax &&  message.InAudioData.NormMin > -1 * silentThreshold) {
 		silentCount += 1
 	} else {
-		if (silentCount != 0) {
-			console.log("continuous silentcount: " + silentCount);
-		}
 		silentCount = 0
 	}
 	if (elapsed > reReqElapsed && silentCount > reReqSilentCount) {
