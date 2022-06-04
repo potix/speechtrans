@@ -2,6 +2,19 @@ package handler
 
 import (
 	"log"
+	"fmt"
+	"strings"
+	"context"
+
+	"github.com/potix/speechtrans/message"
+
+	"google.golang.org/protobuf/types/known/wrapperspb"
+	speech "cloud.google.com/go/speech/apiv1"
+        speechpb "google.golang.org/genproto/googleapis/cloud/speech/v1"
+	translate "cloud.google.com/go/translate/apiv3"
+	translatepb "google.golang.org/genproto/googleapis/cloud/translate/v3"
+	texttospeech "cloud.google.com/go/texttospeech/apiv1"
+        texttospeechpb "google.golang.org/genproto/googleapis/cloud/texttospeech/v1"
 )
 
 type translatorOptions struct {
@@ -28,17 +41,18 @@ type Translator struct {
 	inAudioDataCh   chan []byte
 	srcText         []string
 	dstText         []string
+	voiceMap        map[string]string
 }
 
-func (t *Translator) speechToText(ctx context.Context, inAudioConf *message.InAudioConf, inAudioDataCh chan []byte) (srcText string, error) {
+func (t *Translator)speechToText(ctx context.Context, inAudioConf *message.InAudioConf, inAudioDataCh chan []byte) (error) {
         client, err := speech.NewClient(ctx)
         if err != nil {
-		return "", fmt.Errorf("can not create speech client: %v", err)
+		return fmt.Errorf("can not create speech client: %v", err)
         }
 	defer client.Close()
         stream, err := client.StreamingRecognize(ctx)
         if err != nil {
-		return "", fmt.Errorf("can not create stream: %v", err)
+		return fmt.Errorf("can not create stream: %v", err)
         }
 	log.Printf(">>> %v, %v, %v", inAudioConf.SampleRate, inAudioConf.SrcLang, inAudioConf.ChannelCount)
         // Send the initial configuration message.
@@ -52,21 +66,20 @@ func (t *Translator) speechToText(ctx context.Context, inAudioConf *message.InAu
 					LanguageCode:      inAudioConf.SrcLang,
 					MaxAlternatives:   1,
 					EnableAutomaticPunctuation: true,
-					EnableSpokenPunctuation: true,
-					EnableSpokenEmojis: false,
+					EnableSpokenPunctuation: wrapperspb.Bool(true),
+					EnableSpokenEmojis: wrapperspb.Bool(false),
 					Model: "default",
 					UseEnhanced: false,
-
 				},
 			},
 		},
         })
 	if err != nil {
-		return "", fmt.Errorf("can not send config of streaming recognize request: %v", err)
+		return fmt.Errorf("can not send config of streaming recognize request: %v", err)
         }
 	go func() {
 		for {
-                        buff, ok <-inAudioDataCh
+			buff, ok := <-inAudioDataCh
 			if !ok {
                                 // Nothing else to pipe, close the stream.
                                 if err := stream.CloseSend(); err != nil {
@@ -90,14 +103,14 @@ func (t *Translator) speechToText(ctx context.Context, inAudioConf *message.InAu
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("can not get results from stream: %v", err)
+			return fmt.Errorf("can not get results from stream: %v", err)
 		}
 		if err := resp.Error; err != nil {
 			// Workaround while the API doesn't give a more informative error.
 			if err.Code == 3 || err.Code == 11 {
 				log.Print("WARNING: Speech recognition request exceeded limit of 60 seconds.")
 			}
-			return "", fmt.Errorf("can not recognize: %v", err)
+			return fmt.Errorf("can not recognize: %v", err)
 		}
 		for _, result := range resp.Results {
 			for _, alternative := range result.Alternatives {
@@ -119,7 +132,7 @@ func (t *Translator) ToText(conn *websocket.Conn, inAudioConf *message.InAudioCo
 		if err != nil {
 			toTextNotifyCb(conn, fmt.Errorf("can not convert audio to text: %w", err))
 		}
-	}
+	}()
 }
 
 func (t *Translator) ToTextContent(dataBytes []byte) {
@@ -160,26 +173,30 @@ func (t *Translator) translateText(ctx context.Context, transConf *message.Trans
         }
 }
 
-func  (t *Translator) textToSpeech(ctx context.Context, transConf *message.TransConf) {
+func  (t *Translator) textToSpeech(ctx context.Context, transConf *message.TransConf) error {
         client, err := texttospeech.NewClient(ctx)
         if err != nil {
 		return fmt.Errorf("can not create text to speech client: %v", err)
         }
         defer client.Close()
-        // Perform the text-to-speech request on the text input with the selected
-        // voice parameters and audio file type.
+	name = ""
+	voiceName, ok := t.voiceMap[strings.ToLower(transConf.DstLang + ":" + transConf.Gender)]
+	if ok {
+		name = voiceName
+	}
+	ssmlGender := texttospeechpb.SsmlVoiceGender_MALE
+	if transConf.Gender == "female" {
+		ssmlGender = texttospeechpb.SsmlVoiceGender_FEMALE
+	}
         req := texttospeechpb.SynthesizeSpeechRequest{
-                // Set the text input to be synthesized.
                 Input: &texttospeechpb.SynthesisInput{
                         InputSource: &texttospeechpb.SynthesisInput_Text{Text: strings.Join(t.dstText, "\n")},
                 },
-                // Build the voice request, select the language code ("en-US") and the SSML
-                // voice gender ("neutral").
                 Voice: &texttospeechpb.VoiceSelectionParams{
                         LanguageCode: transConf.DstLang,
-			SsmlGender:   texttospeechpb.SsmlVoiceGender_NEUTRAL, // XXXXXXXxx model map
+			Name: name,
+			SsmlGender: ssmlGender,
                 },
-                // Select the type of audio file you want returned.
                 AudioConfig: &texttospeechpb.AudioConfig{
                         AudioEncoding: texttospeechpb.AudioEncoding_OGG_OPUS,
                 },
@@ -224,6 +241,32 @@ func NewTranslator(projectId string, opts ...TranslatorOption) *Translator {
                 }
                 opt(baseOpts)
         }
+	voiceMap := map[string]string {
+		"ja-jp:male":   "ja-JP-Standard-D",
+		"ja-jp:female": "ja-JP-Standard-A",
+		"en-us:male":   "en-US-Standard-B",
+		"en-us:female": "en-US-Standard-G",
+		"en-gb:male":   "en-GB-Standard-B",
+		"en-gb:female": "en-GB-Standard-A",
+		"en-au:male":   "en-AU-Standard-B",
+		"en-au:female": "en-AU-Standard-A",
+		"fr-fr:male":   "fr-FR-Standard-B",
+		"fr-fr:female": "fr-FR-Standard-A",
+		"nl-nl:male":   "nl-NL-Standard-B",
+		"nl-nl:female": "nl-NL-Standard-A",
+		"de-de:male":   "de-DE-Standard-B",
+		"de-de:female": "de-DE-Standard-A",
+		"it-it:male":   "it-IT-Standard-C",
+		"it-it:female": "it-IT-Standard-A",
+		"ko-KR:male":   "ko-KR-Standard-C",
+		"ko-KR:female": "ko-KR-Standard-A",
+		"ru-RU:male":   "ru-RU-Standard-B",
+		"ru-RU:female": "ru-RU-Standard-A",
+		"sv-SE:male":   "sv-SE-Standard-B",
+		"sv-SE:female": "sv-SE-Standard-A",
+		"tr-TR:male":   "tr-TR-Standard-B",
+		"tr-TR:female": "tr-TR-Standard-A",
+	}
 	return &Translator{
 		opts:            baseOpts,
 		projectId:       projectId,
@@ -231,6 +274,7 @@ func NewTranslator(projectId string, opts ...TranslatorOption) *Translator {
 		inAudioDataCh:   nil,
 		srcText:         make([]string, 0, 10),
 		dstText:         make([]string, 0, 10),
+		voiceMap:        voiceMap,
 	}
 }
 

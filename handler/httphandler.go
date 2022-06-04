@@ -13,6 +13,7 @@ import (
         "github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/potix/speechtrans/message"
+	"github.com/potix/speechtrans/translator"
 )
 
 type httpOptions struct {
@@ -165,7 +166,7 @@ func (h *httpHandler) toTextNotifyCb(conn *websocket.Conn, err error) {
 	msg := &message.Message {
 		MType: message.MTypeToTextNotify,
 		Error: &message.Error{
-			Message: fmt.Sprintf("%v", err)
+			Message: fmt.Sprintf("%v", err),
 		},
 	}
 }
@@ -217,8 +218,7 @@ func (h *HttpHandler) translationLoop(conn *websocket.Conn) {
 				}
 			}
 log.Printf("start %v", msg.InAudioConf)
-			client.srcText = ""
-			translator.ToText(conn, inAudioConf, h.toTextNotifyCb))
+			translator.ToText(conn, inAudioConf, h.toTextNotifyCb)
 			client.progressInAudio = true
 			err := h.sendEmptyMessage(conn, message.MTypeInAudioConfRes, "")
 			if err != nil {
@@ -280,7 +280,7 @@ log.Printf("end")
 				TransResult: &message.TransResult{
 					Encoding: outAudioEncoding,
 					DataBytes: outAudioDataBytes,
-				}
+				},
 			}
 			newMsgJson, err := json.Marshal(newMsg)
 			if err != nil {
